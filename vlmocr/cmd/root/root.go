@@ -300,52 +300,84 @@ func convertPages(modelCfg models.Config, responses []string, noHeaders bool) ([
 }
 
 func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg models.Config, detector *layout.Detector, pages []string, pagesDir, outputDir string) ([]string, []string, [][]paddlelayout.Block, []string, error) {
-	responses := make([]string, 0, len(pages))
-	pageMarkdowns := make([]string, 0, len(pages))
-	layoutBlocks := make([][]paddlelayout.Block, 0, len(pages))
-	layoutErrors := make([]string, 0, len(pages))
+	// Pipeline: layout detection (producer) feeds VLM workers (consumers) via channel.
+	// Layout for page N+1 runs while VLM processes page N blocks concurrently.
+	type pageResult struct {
+		idx    int
+		blocks []paddlelayout.Block
+		raw    []string
+		mds    []string
+		err    string
+	}
 
-	for i, pagePath := range pages {
-		var blocks []paddlelayout.Block
+	nPages := len(pages)
+	resultCh := make(chan pageResult, nPages)
 
-		detectedBlocks, layoutErr := detectPageLayout(detector, pagePath)
-		if layoutErr == nil && len(detectedBlocks) > 0 {
-			cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
-			bs, rs, md := processLayoutBlocks(ctx, client, pagePath, cropDir, detectedBlocks, outputDir)
-			blocks = bs
-			responses = append(responses, strings.Join(rs, "\n---\n"))
-			pageMarkdowns = append(pageMarkdowns, strings.Join(md, "\n\n"))
-		} else {
-			// Fallback: single OCR call for the whole page
-			resp, err := client.ParseImageWithPrompt(ctx, pagePath, "OCR:")
-			if err != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d: %w", i+1, err)
-			}
-			block, blockErr := paddlelayout.FallbackPageBlock(pagePath, resp)
-			if blockErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d fallback: %w", i+1, blockErr)
-			}
-			cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
-			blocks, cropErr := paddlelayout.SaveCrops(pagePath, cropDir, []paddlelayout.Block{block})
-			if cropErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d crops: %w", i+1, cropErr)
-			}
-			responses = append(responses, resp)
-			pageMarkdowns = append(pageMarkdowns, paddlelayout.ToMarkdown(blocks))
-			if layoutErr != nil {
-				layoutErrors = append(layoutErrors, layoutErr.Error())
+	// Producer: run layout detection sequentially, push results to channel.
+	go func() {
+		defer close(resultCh)
+		for i, pagePath := range pages {
+			detectedBlocks, layoutErr := detectPageLayout(detector, pagePath)
+			if layoutErr == nil && len(detectedBlocks) > 0 {
+				cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
+				bs, rs, md := processLayoutBlocks(ctx, client, pagePath, cropDir, detectedBlocks, outputDir)
+				resultCh <- pageResult{idx: i, blocks: bs, raw: rs, mds: md}
 			} else {
-				layoutErrors = append(layoutErrors, "")
+				resp, err := client.ParseImageWithPrompt(ctx, pagePath, "OCR:")
+				if err != nil {
+					resultCh <- pageResult{idx: i, err: fmt.Sprintf("page %d: %v", i+1, err)}
+					continue
+				}
+				block, blockErr := paddlelayout.FallbackPageBlock(pagePath, resp)
+				if blockErr != nil {
+					resultCh <- pageResult{idx: i, err: fmt.Sprintf("page %d fallback: %v", i+1, blockErr)}
+					continue
+				}
+				cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
+				blocks, cropErr := paddlelayout.SaveCrops(pagePath, cropDir, []paddlelayout.Block{block})
+				if cropErr != nil {
+					resultCh <- pageResult{idx: i, err: fmt.Sprintf("page %d crops: %v", i+1, cropErr)}
+					continue
+				}
+				resultCh <- pageResult{
+					idx:    i,
+					blocks: blocks,
+					raw:    []string{resp},
+					mds:    []string{paddlelayout.ToMarkdown(blocks)},
+					err: func() string {
+						if layoutErr != nil {
+							return layoutErr.Error()
+						}
+						return ""
+					}(),
+				}
 			}
-			continue
 		}
-		layoutBlocks = append(layoutBlocks, blocks)
-		layoutErrors = append(layoutErrors, "")
+	}()
+
+	// Collect results in order.
+	results := make([]pageResult, nPages)
+	for r := range resultCh {
+		results[r.idx] = r
+	}
+
+	// Assemble final output.
+	responses := make([]string, nPages)
+	pageMarkdowns := make([]string, nPages)
+	layoutBlocks := make([][]paddlelayout.Block, nPages)
+	layoutErrors := make([]string, nPages)
+	for i, r := range results {
+		if r.err != "" && len(r.raw) == 0 {
+			return nil, nil, nil, nil, fmt.Errorf("%s", r.err)
+		}
+		responses[i] = strings.Join(r.raw, "\n---\n")
+		pageMarkdowns[i] = strings.Join(r.mds, "\n\n")
+		layoutBlocks[i] = r.blocks
+		layoutErrors[i] = r.err
 	}
 
 	return responses, pageMarkdowns, layoutBlocks, layoutErrors, nil
 }
-
 func detectPageLayout(detector *layout.Detector, pagePath string) ([]layout.Block, error) {
 	if detector == nil {
 		return nil, fmt.Errorf("layout detector not initialized")
