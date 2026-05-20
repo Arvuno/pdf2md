@@ -247,7 +247,7 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	} else {
 		responses, err = client.ParseImages(ctx, pages, opts.Concurrency)
 		if err == nil {
-			pageMarkdowns, err = convertPages(modelCfg, responses, opts.NoHeaders)
+			pageMarkdowns, err = convertPages(modelCfg, responses, pages, outputDir, opts.NoHeaders)
 		}
 	}
 	if err != nil {
@@ -277,7 +277,7 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	return nil
 }
 
-func convertPages(modelCfg models.Config, responses []string, noHeaders bool) ([]string, error) {
+func convertPages(modelCfg models.Config, responses, pagePaths []string, outputDir string, noHeaders bool) ([]string, error) {
 	pageMarkdowns := make([]string, 0, len(responses))
 	for i, resp := range responses {
 		var md string
@@ -286,7 +286,13 @@ func convertPages(modelCfg models.Config, responses []string, noHeaders bool) ([
 		case models.PostProcessHTML:
 			md = htmlmd.Convert(resp)
 		case models.PostProcessJSONLayout:
-			md, err = markdown.Convert(resp, markdown.Options{SkipHeadersFooters: noHeaders})
+			opts := markdown.Options{SkipHeadersFooters: noHeaders}
+			if i < len(pagePaths) && pagePaths[i] != "" {
+				cropDir := filepath.Join(outputDir, fmt.Sprintf("page-%d_pictures", i+1))
+				opts.ImagePath = pagePaths[i]
+				opts.CropOutputDir = cropDir
+			}
+			md, err = markdown.Convert(resp, opts)
 			if err != nil {
 				fmt.Printf("Warning: page %d: %v (using raw response)\n", i+1, err)
 				md = resp

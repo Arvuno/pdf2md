@@ -1,7 +1,7 @@
 // Package markdown converts dots.mocr layout JSON output to Markdown format.
 //
 // Layout categories and their handling:
-//   - Picture: omitted (or embedded as base64 image in full version)
+//   - Picture: cropped from page image, saved as PNG, referenced via relative path
 //   - Formula: formatted as LaTeX ($$...$$)
 //   - Table: output as HTML (raw)
 //   - Page-header, Page-footer: optionally skipped
@@ -11,6 +11,12 @@ package markdown
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	"image/png"
+	_ "image/png"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -25,6 +31,10 @@ type LayoutCell struct {
 type Options struct {
 	// SkipHeadersFooters removes Page-header and Page-footer elements.
 	SkipHeadersFooters bool
+	// ImagePath is the source page image used to crop Picture blocks.
+	ImagePath string
+	// CropOutputDir is where cropped Picture PNGs are saved.
+	CropOutputDir string
 }
 
 // Convert converts a JSON layout response string to Markdown.
@@ -40,14 +50,15 @@ func Convert(response string, opts Options) (string, error) {
 		return response, fmt.Errorf("failed to parse layout JSON (returning raw): %w", err)
 	}
 
-	return CellsToMarkdown(cells, opts), nil
+	md := CellsToMarkdown(cells, opts)
+	return md, nil
 }
 
 // CellsToMarkdown converts a slice of LayoutCell to Markdown text.
 func CellsToMarkdown(cells []LayoutCell, opts Options) string {
 	var parts []string
 
-	for _, cell := range cells {
+	for i, cell := range cells {
 		// Skip headers and footers if configured
 		if opts.SkipHeadersFooters &&
 			(cell.Category == "Page-header" || cell.Category == "Page-footer") {
@@ -58,8 +69,10 @@ func CellsToMarkdown(cells []LayoutCell, opts Options) string {
 
 		switch cell.Category {
 		case "Picture":
-			// Pictures are omitted in the text-only markdown output
-			continue
+			imgRef := cropAndSavePicture(cell, i, opts)
+			if imgRef != "" {
+				parts = append(parts, imgRef)
+			}
 		case "Formula":
 			parts = append(parts, formatFormula(text))
 		case "Table":
@@ -76,6 +89,88 @@ func CellsToMarkdown(cells []LayoutCell, opts Options) string {
 	}
 
 	return strings.Join(parts, "\n\n")
+}
+
+// cropAndSavePicture crops a picture region from the source image and returns
+// a Markdown image reference with a relative path.
+func cropAndSavePicture(cell LayoutCell, index int, opts Options) string {
+	if opts.ImagePath == "" || opts.CropOutputDir == "" {
+		return ""
+	}
+	if len(cell.BBox) != 4 {
+		return ""
+	}
+
+	src, err := openImage(opts.ImagePath)
+	if err != nil {
+		return ""
+	}
+
+	bounds := src.Bounds()
+	x1, y1 := clampCoord(cell.BBox[0], bounds.Min.X, bounds.Max.X), clampCoord(cell.BBox[1], bounds.Min.Y, bounds.Max.Y)
+	x2, y2 := clampCoord(cell.BBox[2], bounds.Min.X, bounds.Max.X), clampCoord(cell.BBox[3], bounds.Min.Y, bounds.Max.Y)
+	if x2 < x1 {
+		x1, x2 = x2, x1
+	}
+	if y2 < y1 {
+		y1, y2 = y2, y1
+	}
+	if x2 <= x1 || y2 <= y1 {
+		return ""
+	}
+
+	crop := image.NewRGBA(image.Rect(0, 0, x2-x1, y2-y1))
+	for y := 0; y < y2-y1; y++ {
+		for x := 0; x < x2-x1; x++ {
+			crop.Set(x, y, src.At(x1+x, y1+y))
+		}
+	}
+
+	if err := os.MkdirAll(opts.CropOutputDir, 0755); err != nil {
+		return ""
+	}
+
+	name := fmt.Sprintf("picture-%03d.png", index+1)
+	path := filepath.Join(opts.CropOutputDir, name)
+	if err := writePNG(path, crop); err != nil {
+		return ""
+	}
+
+	// Use a relative path from the markdown file's perspective:
+	// Markdown is typically in the output dir, crops are in a subdir.
+	// The path is already relative to CWD; make it relative to the output dir's parent.
+	// We use filepath.ToSlash for consistent separators.
+	rel := filepath.ToSlash(filepath.Base(opts.CropOutputDir) + "/" + name)
+	return fmt.Sprintf("![Picture](%s)", rel)
+}
+
+func openImage(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	return img, err
+}
+
+func clampCoord(v, low, high int) int {
+	if v < low {
+		return low
+	}
+	if v > high {
+		return high
+	}
+	return v
+}
+
+func writePNG(path string, img image.Image) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return png.Encode(f, img)
 }
 
 // formatFormula wraps formula text in LaTeX display math delimiters.
