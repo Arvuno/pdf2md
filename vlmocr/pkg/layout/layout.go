@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -167,18 +168,31 @@ func InitONNXRuntime() error {
 		return missingLibError()
 	}
 
-	// Auto-fix CUDA/cuDNN: symlink libcudnn*.so into ONNX lib dir.
-	// ONNX runtime's dlopen finds the provider .so next to itself, but the
-	// provider's own dependency on libcudnn.so needs the linker search path.
-	// Symlinking cuDNN into ONNX's dir is the most portable fix.
-	libDir := filepath.Dir(libPath)
-	cudnnDir := findCUDNNLib(libDir)
+	// Symlink cuDNN into ORT dir.
+	ortDir := filepath.Dir(libPath)
+	cudnnDir := findCUDNNLib(ortDir)
 	if cudnnDir != "" {
 		matches, _ := filepath.Glob(filepath.Join(cudnnDir, "libcudnn*.so*"))
 		for _, src := range matches {
-			dst := filepath.Join(libDir, filepath.Base(src))
+			dst := filepath.Join(ortDir, filepath.Base(src))
 			if _, err := os.Stat(dst); os.IsNotExist(err) {
 				_ = os.Symlink(src, dst)
+			}
+		}
+		// CUDA provider dlopen needs libcudnn in the linker search path.
+		// os.Setenv doesn't affect the current process, so we re-exec with
+		// LD_LIBRARY_PATH set correctly. The _ORT_CUDA_FIXED guard prevents
+		// infinite re-exec loops.
+		if os.Getenv("_ORT_CUDA_FIXED") != "1" {
+			cur := os.Getenv("LD_LIBRARY_PATH")
+			newPath := ortDir
+			if cur != "" {
+				newPath = ortDir + ":" + cur
+			}
+			os.Setenv("LD_LIBRARY_PATH", newPath)
+			os.Setenv("_ORT_CUDA_FIXED", "1")
+			if exe, err := os.Executable(); err == nil {
+				syscall.Exec(exe, os.Args, os.Environ())
 			}
 		}
 	}
