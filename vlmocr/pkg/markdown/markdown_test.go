@@ -173,17 +173,17 @@ func TestCombinePages_MultiplePages(t *testing.T) {
 	pages := []string{"Page 1 content", "Page 2 content", "Page 3 content"}
 	result := CombinePages(pages)
 
-	if !strings.Contains(result, "<!-- Page 1 -->") {
-		t.Error("expected Page 1 marker")
+	if !strings.Contains(result, "Page 1 content") {
+		t.Error("expected Page 1 content")
 	}
-	if !strings.Contains(result, "<!-- Page 2 -->") {
-		t.Error("expected Page 2 marker")
+	if !strings.Contains(result, "Page 2 content") {
+		t.Error("expected Page 2 content")
 	}
-	if !strings.Contains(result, "<!-- Page 3 -->") {
-		t.Error("expected Page 3 marker")
+	if !strings.Contains(result, "Page 3 content") {
+		t.Error("expected Page 3 content")
 	}
-	if !strings.Contains(result, "---") {
-		t.Error("expected page separator ---")
+	if !strings.Contains(result, "\n\n") {
+		t.Error("expected double newline between pages")
 	}
 }
 

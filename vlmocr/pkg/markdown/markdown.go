@@ -138,16 +138,12 @@ func cleanLatexPreamble(text string) string {
 // CombinePages merges multiple page markdown results into a single document.
 func CombinePages(pages []string) string {
 	var parts []string
-	for i, page := range pages {
+	for _, page := range pages {
 		page = strings.TrimSpace(page)
 		if page == "" {
 			continue
 		}
-		if len(pages) > 1 {
-			parts = append(parts, fmt.Sprintf("<!-- Page %d -->\n\n%s", i+1, page))
-		} else {
-			parts = append(parts, page)
-		}
+		parts = append(parts, page)
 	}
-	return strings.Join(parts, "\n\n---\n\n")
+	return strings.Join(parts, "\n\n")
 }
