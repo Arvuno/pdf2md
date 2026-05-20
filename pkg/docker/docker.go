@@ -110,7 +110,6 @@ func BuildRunArgs(cfg Config) ([]string, string, int) {
 		args = append(args, cfg.VLLMArgs...)
 	}
 
-
 	return args, cfg.ContainerName, cfg.Port
 }
 
