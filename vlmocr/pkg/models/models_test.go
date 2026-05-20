@@ -53,9 +53,6 @@ func TestGet_PaddleOCRVLGGUF(t *testing.T) {
 	if cfg.HuggingFaceRepo != "PaddlePaddle/PaddleOCR-VL-1.5-GGUF" {
 		t.Errorf("unexpected repo: %s", cfg.HuggingFaceRepo)
 	}
-	if cfg.DockerImage != "ghcr.io/ggml-org/llama.cpp:full-cuda13" {
-		t.Errorf("unexpected Docker image: %s", cfg.DockerImage)
-	}
 	if cfg.LlamaModelFile == "" || cfg.LlamaMMProjFile == "" {
 		t.Error("expected llama.cpp model and mmproj files")
 	}

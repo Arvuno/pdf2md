@@ -32,16 +32,17 @@ const (
 
 // Opts holds all CLI options.
 type Opts struct {
-	ModelName   string
-	ModelDir    string
-	OutputDir   string
-	DPI         int
-	Port        int
-	Concurrency int
-	VLLMImage   string
-	GPUDevices  string
-	NoHeaders   bool
-	Timeout     time.Duration
+	ModelName     string
+	ModelDir      string
+	OutputDir     string
+	DPI           int
+	Port          int
+	Concurrency   int
+	VLLMImage     string
+	LlamaCppImage string
+	GPUDevices    string
+	NoHeaders     bool
+	Timeout       time.Duration
 }
 
 // NewCommand creates the root command.
@@ -84,6 +85,7 @@ Use --model-dir to specify a local model directory and skip download.`,
 	flags.IntVar(&opts.Port, "port", defaultPort, "Host port for inference server")
 	flags.IntVarP(&opts.Concurrency, "concurrency", "c", defaultConcurrency, "Max concurrent inference requests")
 	flags.StringVar(&opts.VLLMImage, "vllm-image", docker.DefaultVLLMImage, "vLLM Docker image (vLLM models only)")
+	flags.StringVar(&opts.LlamaCppImage, "llamacpp-image", docker.DefaultLlamaCppImage, "llama.cpp Docker image (llama.cpp models only)")
 	flags.StringVar(&opts.GPUDevices, "gpu", "all", "GPU devices to use")
 	flags.BoolVar(&opts.NoHeaders, "no-headers", false, "Skip page headers and footers")
 	flags.DurationVar(&opts.Timeout, "timeout", defaultTimeout, "Timeout for vLLM server startup and inference")
@@ -159,7 +161,20 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 		docker.StopContainer(containerName)
 	}()
 
-	image := opts.VLLMImage
+	image := ""
+	switch modelCfg.Runtime {
+	case models.RuntimeLlamaCpp:
+		image = opts.LlamaCppImage
+		if image == "" {
+			image = docker.DefaultLlamaCppImage
+		}
+	default:
+		image = opts.VLLMImage
+		if image == "" {
+			image = docker.DefaultVLLMImage
+		}
+	}
+	// Model-specific override (highest priority)
 	if modelCfg.DockerImage != "" {
 		image = modelCfg.DockerImage
 	}
@@ -288,28 +303,20 @@ func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg mo
 
 		layout, err := paddlelayout.Parse(resp)
 		if err != nil {
-			fallbackPrompt := modelCfg.FallbackPrompt
-			if fallbackPrompt == "" {
-				fallbackPrompt = "OCR:"
-			}
-			fallback, fallbackErr := client.ParseImageWithPrompt(ctx, pagePath, fallbackPrompt)
-			if fallbackErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d fallback OCR: %w (layout parse error: %v)", i+1, fallbackErr, err)
-			}
-			block, blockErr := paddlelayout.FallbackPageBlock(pagePath, fallback)
+			// OCR prompt works reliably; use the response text as a full-page layout block.
+			block, blockErr := paddlelayout.FallbackPageBlock(pagePath, resp)
 			if blockErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d fallback layout: %w", i+1, blockErr)
+				return nil, nil, nil, nil, fmt.Errorf("page %d: %w", i+1, blockErr)
 			}
 			cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
 			blocks, cropErr := paddlelayout.SaveCrops(pagePath, cropDir, []paddlelayout.Block{block})
 			if cropErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d fallback crops: %w", i+1, cropErr)
+				return nil, nil, nil, nil, fmt.Errorf("page %d crops: %w", i+1, cropErr)
 			}
 			responses = append(responses, resp)
 			pageMarkdowns = append(pageMarkdowns, paddlelayout.ToMarkdown(blocks))
 			layoutBlocks = append(layoutBlocks, blocks)
-			layoutErrors = append(layoutErrors, err.Error())
-			fmt.Printf("Warning: page %d layout parse failed, used full-page layout fallback: %v\n", i+1, err)
+			layoutErrors = append(layoutErrors, "")
 			continue
 		}
 

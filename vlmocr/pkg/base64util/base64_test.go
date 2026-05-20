@@ -76,7 +76,7 @@ func TestDetectMediaType(t *testing.T) {
 		{"image.gif", "image/gif"},
 		{"image.webp", "image/webp"},
 		{"image.bmp", "image/bmp"},
-		{"image.unknown", "image/png"}, // default
+		{"image.unknown", "image/png"},      // default
 		{"path/to/image.JPG", "image/jpeg"}, // case insensitive
 	}
 

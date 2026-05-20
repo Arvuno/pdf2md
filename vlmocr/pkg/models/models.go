@@ -111,17 +111,11 @@ var registry = map[string]Config{
 		Name:            "paddleocr-vl-1.5-gguf",
 		Runtime:         RuntimeLlamaCpp,
 		HuggingFaceRepo: "PaddlePaddle/PaddleOCR-VL-1.5-GGUF",
-		DefaultPrompt: `Analyze this document page and return ONLY valid JSON. Do not use markdown fences.
-Return this schema:
-{
-  "blocks": [
-    {"bbox": [x1, y1, x2, y2], "label": "text|title|table|formula|image|chart|seal|other", "text": "markdown content", "order": 1}
-  ]
-}
-Coordinates must be pixel coordinates in the input image. Sort blocks by reading order. Preserve the original language. Use Markdown for text, HTML for tables, and LaTeX for formulas.`,
-		FallbackPrompt:      "OCR:",
+		// PaddleOCR-VL GGUF VLM component does OCR recognition.
+		// The full pipeline requires a separate layout analysis model (PP-DocLayoutV2).
+		// We use the VLM for per-page OCR text extraction.
+		DefaultPrompt:       "OCR:",
 		ServedModelName:     "paddleocr-vl-1.5-gguf",
-		DockerImage:         "ghcr.io/ggml-org/llama.cpp:full-cuda13",
 		LlamaModelFile:      "PaddleOCR-VL-1.5.gguf",
 		LlamaMMProjFile:     "PaddleOCR-VL-1.5-mmproj.gguf",
 		LlamaArgs:           []string{"--temp", "0", "--ctx-size", "131072", "--n-gpu-layers", "999"},

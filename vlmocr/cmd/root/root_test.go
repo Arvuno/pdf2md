@@ -19,7 +19,7 @@ func TestNewCommand(t *testing.T) {
 	flags := cmd.Flags()
 	flagNames := []string{
 		"model", "model-dir", "output", "dpi", "port",
-		"concurrency", "vllm-image", "gpu",
+		"concurrency", "vllm-image", "llamacpp-image", "gpu",
 		"no-headers", "timeout",
 	}
 

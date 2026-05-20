@@ -84,6 +84,7 @@ vlmocr [flags] <input.pdf>
 | `--port` | | `8000` | 推理服务宿主机端口 |
 | `--concurrency` | `-c` | `16` | 最大并发推理数 |
 | `--vllm-image` | | `vllm/vllm-openai:latest` | vLLM 模型使用的 Docker 镜像；llama.cpp 模型使用模型内置镜像 |
+| `--llamacpp-image` | | `ghcr.io/ggml-org/llama.cpp:full-cuda13` | llama.cpp 模型使用的 Docker 镜像 |
 | `--gpu` | | `all` | 使用哪些 GPU |
 | `--no-headers` | | `false` | 去掉页眉页脚 |
 | `--timeout` | | `10m` | 服务启动超时 |
