@@ -1,0 +1,67 @@
+[
+  {
+    "bbox": [72, 50, 540, 90],
+    "category": "Title",
+    "text": "A Sample Document Title"
+  },
+  {
+    "bbox": [72, 100, 540, 150],
+    "category": "Text",
+    "text": "This is a paragraph of text in the document. It contains multiple sentences that should be preserved in the markdown output."
+  },
+  {
+    "bbox": [72, 160, 540, 200],
+    "category": "Section-header",
+    "text": "1. Introduction"
+  },
+  {
+    "bbox": [72, 210, 540, 260],
+    "category": "Text",
+    "text": "The introduction provides context for the document. This section should appear as regular markdown text."
+  },
+  {
+    "bbox": [72, 270, 540, 320],
+    "category": "Formula",
+    "text": "E = mc^2"
+  },
+  {
+    "bbox": [72, 330, 540, 400],
+    "category": "Table",
+    "text": "<table><tr><td>Header 1</td><td>Header 2</td></tr><tr><td>Data 1</td><td>Data 2</td></tr></table>"
+  },
+  {
+    "bbox": [72, 410, 540, 450],
+    "category": "Caption",
+    "text": "Table 1: Sample table caption"
+  },
+  {
+    "bbox": [72, 460, 540, 500],
+    "category": "Picture",
+    "text": ""
+  },
+  {
+    "bbox": [72, 510, 540, 540],
+    "category": "List-item",
+    "text": "- First item in a list"
+  },
+  {
+    "bbox": [72, 550, 540, 580],
+    "category": "List-item",
+    "text": "- Second item in a list"
+  },
+  {
+    "bbox": [72, 590, 540, 620],
+    "category": "Footnote",
+    "text": "1 This is a footnote."
+  },
+  {
+    "bbox": [72, 0, 540, 30],
+    "category": "Page-header",
+    "text": "Header Text"
+  },
+  {
+    "bbox": [72, 750, 540, 780],
+    "category": "Page-footer",
+    "text": "Page 1"
+  }
+]

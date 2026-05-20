@@ -1,0 +1,24 @@
+# Built binary
+vlmocr
+
+# Local model weights
+weights/
+
+# Output files
+outputs/
+*.pdf_pages/
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

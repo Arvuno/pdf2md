@@ -1,0 +1,17 @@
+[
+  {
+    "bbox": [100, 100, 400, 150],
+    "category": "Formula",
+    "text": "$$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$"
+  },
+  {
+    "bbox": [100, 200, 400, 250],
+    "category": "Formula",
+    "text": "\\[\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}\\]"
+  },
+  {
+    "bbox": [100, 300, 400, 350],
+    "category": "Formula",
+    "text": "x^2 + y^2 = z^2"
+  }
+]
