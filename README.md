@@ -12,6 +12,23 @@
 | `logics-parsing-v2` | 阿里巴巴 Logics-Parsing-v2，HTML 结构化解析 | `Logics-MLLM/Logics-Parsing-v2` |
 | `paddleocr-vl-1.5-gguf` | PaddleOCR-VL-1.5 GGUF，llama.cpp 后端，支持 layout JSON 和按块裁图 | `PaddlePaddle/PaddleOCR-VL-1.5-GGUF` |
 
+### PaddleOCR-VL 特殊依赖
+
+`paddleocr-vl-1.5-gguf` 模型使用 ONNX Runtime 进行页面布局检测（PP-DocLayoutV3），需要本机安装 onnxruntime：
+
+```bash
+# GPU 加速（推荐，需要 NVIDIA GPU + CUDA/cuDNN）
+pip install onnxruntime-gpu
+
+# 或 CPU 版本
+pip install onnxruntime
+
+# apt 方式
+sudo apt install libonnxruntime-dev
+```
+
+工具启动时会自动搜索 `libonnxruntime.so`，并尝试启用 CUDA 提供器。如 CUDA 不可用会打印警告并回退到 CPU。
+
 ## 快速开始（小白版）
 
 ### 前置条件
