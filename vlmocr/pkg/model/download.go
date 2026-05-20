@@ -14,9 +14,10 @@ import (
 
 // DownloadConfig holds configuration for model download.
 type DownloadConfig struct {
-	RepoID    string // HuggingFace repo ID (e.g. "rednote-hilab/dots.mocr")
-	TargetDir string // Plain local model directory (e.g. "weights/dots-ocr")
-	Token     string // HuggingFace API token (optional, reads HF_TOKEN env if empty)
+	RepoID     string   // HuggingFace repo ID (e.g. "rednote-hilab/dots.mocr")
+	TargetDir  string   // Plain local model directory (e.g. "weights/dots-ocr")
+	ReadyFiles []string // Files that must exist to consider TargetDir ready; defaults to config.json
+	Token      string   // HuggingFace API token (optional, reads HF_TOKEN env if empty)
 }
 
 // Download downloads a model from HuggingFace and prepares it in TargetDir.
@@ -34,7 +35,7 @@ func Download(cfg DownloadConfig) (string, error) {
 		return "", fmt.Errorf("resolving target dir: %w", err)
 	}
 
-	if IsModelDownloaded(targetDir) {
+	if IsModelDownloaded(targetDir, cfg.ReadyFiles...) {
 		fmt.Printf("Model already prepared: %s\n", targetDir)
 		return targetDir, nil
 	}
@@ -77,21 +78,31 @@ func Download(cfg DownloadConfig) (string, error) {
 		}
 	}
 
-	if !IsModelDownloaded(targetDir) {
-		return "", fmt.Errorf("downloaded model is missing config.json in %s", targetDir)
+	if !IsModelDownloaded(targetDir, cfg.ReadyFiles...) {
+		return "", fmt.Errorf("downloaded model is missing required files in %s", targetDir)
 	}
 
 	fmt.Printf("Prepared %d files in %s\n", len(downloadedPaths), targetDir)
 	return targetDir, nil
 }
 
-// IsModelDownloaded checks if a plain local model directory is ready for vLLM.
-func IsModelDownloaded(modelDir string) bool {
+// IsModelDownloaded checks if a plain local model directory is ready.
+func IsModelDownloaded(modelDir string, requiredFiles ...string) bool {
 	if modelDir == "" {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(modelDir, "config.json"))
-	return err == nil
+	if len(requiredFiles) == 0 {
+		requiredFiles = []string{"config.json"}
+	}
+	for _, file := range requiredFiles {
+		if file == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(modelDir, file)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func copyFile(src, dst string) error {

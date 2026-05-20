@@ -42,6 +42,28 @@ func TestGet_LogicsParsingV2(t *testing.T) {
 	}
 }
 
+func TestGet_PaddleOCRVLGGUF(t *testing.T) {
+	cfg, err := Get("paddleocr-vl-1.5-gguf")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Runtime != RuntimeLlamaCpp {
+		t.Errorf("expected RuntimeLlamaCpp, got %v", cfg.Runtime)
+	}
+	if cfg.HuggingFaceRepo != "PaddlePaddle/PaddleOCR-VL-1.5-GGUF" {
+		t.Errorf("unexpected repo: %s", cfg.HuggingFaceRepo)
+	}
+	if cfg.DockerImage != "ghcr.io/ggml-org/llama.cpp:full-cuda13" {
+		t.Errorf("unexpected Docker image: %s", cfg.DockerImage)
+	}
+	if cfg.LlamaModelFile == "" || cfg.LlamaMMProjFile == "" {
+		t.Error("expected llama.cpp model and mmproj files")
+	}
+	if cfg.PostProcess != PostProcessPaddleLayout {
+		t.Errorf("expected PostProcessPaddleLayout, got %v", cfg.PostProcess)
+	}
+}
+
 func TestGet_Unknown(t *testing.T) {
 	_, err := Get("nonexistent-model")
 	if err == nil {
@@ -60,6 +82,9 @@ func TestAvailable(t *testing.T) {
 	if !contains(avail, "logics-parsing-v2") {
 		t.Errorf("Available() should contain 'logics-parsing-v2', got: %s", avail)
 	}
+	if !contains(avail, "paddleocr-vl-1.5-gguf") {
+		t.Errorf("Available() should contain 'paddleocr-vl-1.5-gguf', got: %s", avail)
+	}
 }
 
 func TestDefaultModel(t *testing.T) {
@@ -75,8 +100,9 @@ func TestDefaultModel(t *testing.T) {
 
 func TestAllModelsHaveRequiredFields(t *testing.T) {
 	for name, cfg := range map[string]Config{
-		"dots-ocr":          MustGet("dots-ocr"),
-		"logics-parsing-v2": MustGet("logics-parsing-v2"),
+		"dots-ocr":              MustGet("dots-ocr"),
+		"logics-parsing-v2":     MustGet("logics-parsing-v2"),
+		"paddleocr-vl-1.5-gguf": MustGet("paddleocr-vl-1.5-gguf"),
 	} {
 		if cfg.Name == "" {
 			t.Errorf("%s: Name is empty", name)

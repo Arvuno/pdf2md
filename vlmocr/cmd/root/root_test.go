@@ -53,6 +53,9 @@ func TestCommand_Help(t *testing.T) {
 	if !strings.Contains(output, "logics-parsing-v2") {
 		t.Error("help should mention logics-parsing-v2 model")
 	}
+	if !strings.Contains(output, "paddleocr-vl-1.5-gguf") {
+		t.Error("help should mention paddleocr-vl-1.5-gguf model")
+	}
 	if !strings.Contains(output, "model-dir") {
 		t.Error("help should mention model-dir flag")
 	}

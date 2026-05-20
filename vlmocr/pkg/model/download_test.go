@@ -17,6 +17,15 @@ func TestIsModelDownloaded(t *testing.T) {
 	if !IsModelDownloaded(dir) {
 		t.Error("expected true with config.json")
 	}
+	if IsModelDownloaded(dir, "model.gguf") {
+		t.Error("expected false without required GGUF file")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "model.gguf"), []byte("gguf"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if !IsModelDownloaded(dir, "model.gguf") {
+		t.Error("expected true with required GGUF file")
+	}
 }
 
 func TestDownload_MissingRepoID(t *testing.T) {

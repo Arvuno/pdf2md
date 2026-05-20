@@ -16,8 +16,8 @@ import (
 
 // Client wraps an OpenAI-compatible client for vLLM inference.
 type Client struct {
-	client openai.Client
-	model  models.Config
+	client  openai.Client
+	model   models.Config
 	timeout time.Duration
 }
 
@@ -36,20 +36,24 @@ func NewClient(baseURL string, modelCfg models.Config, timeout time.Duration) *C
 	)
 
 	return &Client{
-		client: client,
-		model:  modelCfg,
+		client:  client,
+		model:   modelCfg,
 		timeout: timeout,
 	}
 }
 
-// ParseImage sends an image to the vLLM server and returns the model's response.
+// ParseImage sends an image to the inference server and returns the model's response.
 func (c *Client) ParseImage(ctx context.Context, imagePath string) (string, error) {
+	return c.ParseImageWithPrompt(ctx, imagePath, c.model.DefaultPrompt)
+}
+
+// ParseImageWithPrompt sends an image with an explicit prompt.
+func (c *Client) ParseImageWithPrompt(ctx context.Context, imagePath string, prompt string) (string, error) {
 	dataURI, err := base64util.ImageToBase64DataURI(imagePath)
 	if err != nil {
 		return "", fmt.Errorf("encoding image: %w", err)
 	}
 
-	prompt := c.model.DefaultPrompt
 	if c.model.ImagePromptTag != "" {
 		prompt = c.model.ImagePromptTag + prompt
 	}
@@ -67,10 +71,10 @@ func (c *Client) ParseImage(ctx context.Context, imagePath string) (string, erro
 	defer cancel()
 
 	resp, err := c.client.Chat.Completions.New(reqCtx, openai.ChatCompletionNewParams{
-		Messages:           messages,
-		Model:              c.model.ServedModelName,
-		Temperature:        openai.Float(c.model.Temperature),
-		TopP:               openai.Float(c.model.TopP),
+		Messages:            messages,
+		Model:               c.model.ServedModelName,
+		Temperature:         openai.Float(c.model.Temperature),
+		TopP:                openai.Float(c.model.TopP),
 		MaxCompletionTokens: openai.Int(c.model.MaxCompletionTokens),
 	})
 	if err != nil {
