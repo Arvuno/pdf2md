@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/png"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/ninehills/pdf2md/vlmocr/pkg/docker"
 	"github.com/ninehills/pdf2md/vlmocr/pkg/htmlmd"
 	"github.com/ninehills/pdf2md/vlmocr/pkg/inference"
+	"github.com/ninehills/pdf2md/vlmocr/pkg/layout"
 	"github.com/ninehills/pdf2md/vlmocr/pkg/markdown"
 	"github.com/ninehills/pdf2md/vlmocr/pkg/model"
 	"github.com/ninehills/pdf2md/vlmocr/pkg/models"
@@ -30,7 +34,6 @@ const (
 	defaultTimeout     = 10 * time.Minute
 )
 
-// Opts holds all CLI options.
 type Opts struct {
 	ModelName     string
 	ModelDir      string
@@ -45,7 +48,6 @@ type Opts struct {
 	Timeout       time.Duration
 }
 
-// NewCommand creates the root command.
 func NewCommand() *cobra.Command {
 	opts := &Opts{}
 
@@ -58,15 +60,16 @@ Vision Language Models via local Docker inference servers.
 Supported models:
   - dots-ocr          dots.mocr by RedNote (layout-aware OCR)
   - logics-parsing-v2 Logics-Parsing-v2 by Alibaba (HTML-structured parsing)
-  - paddleocr-vl-1.5-gguf PaddleOCR-VL-1.5 GGUF via llama.cpp (layout + OCR)
+  - paddleocr-vl-1.5-gguf PaddleOCR-VL-1.5 GGUF via llama.cpp (ONNX layout + VLM OCR)
 
-	Output (default: current directory):
-  - <name>.pdf_pages/ — per-page images
+Output (default: current directory):
+  - <name>.pdf_pages/ — per-page images + layout block crops
   - <name>.md         — combined Markdown
   - <name>.json       — detailed per-page data
 
 Requirements:
   - Docker with GPU support (nvidia-docker)
+  - ONNX Runtime (libonnxruntime.so) for paddleocr-vl-1.5-gguf layout detection
 
 Model weights are automatically prepared under ./weights/<model>/ on first use.
 Use --model-dir to specify a local model directory and skip download.`,
@@ -88,12 +91,11 @@ Use --model-dir to specify a local model directory and skip download.`,
 	flags.StringVar(&opts.LlamaCppImage, "llamacpp-image", docker.DefaultLlamaCppImage, "llama.cpp Docker image (llama.cpp models only)")
 	flags.StringVar(&opts.GPUDevices, "gpu", "all", "GPU devices to use")
 	flags.BoolVar(&opts.NoHeaders, "no-headers", false, "Skip page headers and footers")
-	flags.DurationVar(&opts.Timeout, "timeout", defaultTimeout, "Timeout for vLLM server startup and inference")
+	flags.DurationVar(&opts.Timeout, "timeout", defaultTimeout, "Timeout for inference server startup")
 
 	return cmd
 }
 
-// Execute runs the root command.
 func Execute() {
 	cmd := NewCommand()
 	if err := cmd.Execute(); err != nil {
@@ -121,14 +123,12 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	// Step 1: Resolve model directory
 	var modelDir string
 	if opts.ModelDir != "" {
-		// User specified a local model directory — skip download
 		modelDir, err = filepath.Abs(opts.ModelDir)
 		if err != nil {
 			return fmt.Errorf("resolving model dir: %w", err)
 		}
 		fmt.Printf("=== Using local model: %s ===\n", modelDir)
 	} else {
-		// Auto-download/prepare model under local weights/ (skips if already prepared)
 		fmt.Println("=== Step 1: Prepare model ===")
 		modelDir, err = model.Download(model.DownloadConfig{
 			RepoID:     modelCfg.HuggingFaceRepo,
@@ -138,6 +138,28 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 		if err != nil {
 			return fmt.Errorf("downloading model: %w", err)
 		}
+	}
+
+	// Step 1b: If paddle layout, download/init layout ONNX model
+	var detector *layout.Detector
+	if modelCfg.PostProcess == models.PostProcessPaddleLayout {
+		fmt.Println("=== Step 1b: Prepare layout model ===")
+		layoutDir, err := model.Download(model.DownloadConfig{
+			RepoID:     layout.ModelRepoID,
+			TargetDir:  filepath.Join("weights", "layout-model"),
+			ReadyFiles: []string{layout.ModelFileName, layout.ConfigFileName},
+		})
+		if err != nil {
+			return fmt.Errorf("downloading layout model: %w", err)
+		}
+		if err := layout.InitONNXRuntime(); err != nil {
+			return fmt.Errorf("initializing ONNX Runtime: %w", err)
+		}
+		detector, err = layout.NewDetector(layoutDir)
+		if err != nil {
+			return fmt.Errorf("creating layout detector: %w", err)
+		}
+		defer detector.Destroy()
 	}
 
 	inputAbs, err := filepath.Abs(inputPath)
@@ -161,23 +183,18 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 		docker.StopContainer(containerName)
 	}()
 
-	image := ""
+	// Select Docker image based on runtime and CLI flags
+	image := opts.VLLMImage
 	switch modelCfg.Runtime {
 	case models.RuntimeLlamaCpp:
-		image = opts.LlamaCppImage
-		if image == "" {
-			image = docker.DefaultLlamaCppImage
-		}
-	default:
-		image = opts.VLLMImage
-		if image == "" {
-			image = docker.DefaultVLLMImage
+		if opts.LlamaCppImage != "" {
+			image = opts.LlamaCppImage
 		}
 	}
-	// Model-specific override (highest priority)
 	if modelCfg.DockerImage != "" {
 		image = modelCfg.DockerImage
 	}
+
 	containerCfg := docker.Config{
 		Runtime:         string(modelCfg.Runtime),
 		Image:           image,
@@ -226,7 +243,7 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	var layoutErrors []string
 
 	if modelCfg.PostProcess == models.PostProcessPaddleLayout {
-		responses, pageMarkdowns, layoutBlocks, layoutErrors, err = parsePaddlePages(ctx, client, modelCfg, pages, pagesDir)
+		responses, pageMarkdowns, layoutBlocks, layoutErrors, err = parsePaddlePages(ctx, client, modelCfg, detector, pages, pagesDir, outputDir)
 	} else {
 		responses, err = client.ParseImages(ctx, pages, opts.Concurrency)
 		if err == nil {
@@ -260,13 +277,6 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	return nil
 }
 
-func modelReadyFiles(modelCfg models.Config) []string {
-	if modelCfg.Runtime == models.RuntimeLlamaCpp {
-		return []string{modelCfg.LlamaModelFile, modelCfg.LlamaMMProjFile}
-	}
-	return []string{"config.json"}
-}
-
 func convertPages(modelCfg models.Config, responses []string, noHeaders bool) ([]string, error) {
 	pageMarkdowns := make([]string, 0, len(responses))
 	for i, resp := range responses {
@@ -289,24 +299,31 @@ func convertPages(modelCfg models.Config, responses []string, noHeaders bool) ([
 	return pageMarkdowns, nil
 }
 
-func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg models.Config, pages []string, pagesDir string) ([]string, []string, [][]paddlelayout.Block, []string, error) {
+func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg models.Config, detector *layout.Detector, pages []string, pagesDir, outputDir string) ([]string, []string, [][]paddlelayout.Block, []string, error) {
 	responses := make([]string, 0, len(pages))
 	pageMarkdowns := make([]string, 0, len(pages))
 	layoutBlocks := make([][]paddlelayout.Block, 0, len(pages))
 	layoutErrors := make([]string, 0, len(pages))
 
 	for i, pagePath := range pages {
-		resp, err := client.ParseImageWithPrompt(ctx, pagePath, modelCfg.DefaultPrompt)
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("page %d layout: %w", i+1, err)
-		}
+		var blocks []paddlelayout.Block
 
-		layout, err := paddlelayout.Parse(resp)
-		if err != nil {
-			// OCR prompt works reliably; use the response text as a full-page layout block.
+		detectedBlocks, layoutErr := detectPageLayout(detector, pagePath)
+		if layoutErr == nil && len(detectedBlocks) > 0 {
+			cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
+			bs, rs, md := processLayoutBlocks(ctx, client, pagePath, cropDir, detectedBlocks, outputDir)
+			blocks = bs
+			responses = append(responses, strings.Join(rs, "\n---\n"))
+			pageMarkdowns = append(pageMarkdowns, strings.Join(md, "\n\n"))
+		} else {
+			// Fallback: single OCR call for the whole page
+			resp, err := client.ParseImageWithPrompt(ctx, pagePath, "OCR:")
+			if err != nil {
+				return nil, nil, nil, nil, fmt.Errorf("page %d: %w", i+1, err)
+			}
 			block, blockErr := paddlelayout.FallbackPageBlock(pagePath, resp)
 			if blockErr != nil {
-				return nil, nil, nil, nil, fmt.Errorf("page %d: %w", i+1, blockErr)
+				return nil, nil, nil, nil, fmt.Errorf("page %d fallback: %w", i+1, blockErr)
 			}
 			cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
 			blocks, cropErr := paddlelayout.SaveCrops(pagePath, cropDir, []paddlelayout.Block{block})
@@ -315,23 +332,95 @@ func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg mo
 			}
 			responses = append(responses, resp)
 			pageMarkdowns = append(pageMarkdowns, paddlelayout.ToMarkdown(blocks))
-			layoutBlocks = append(layoutBlocks, blocks)
-			layoutErrors = append(layoutErrors, "")
+			if layoutErr != nil {
+				layoutErrors = append(layoutErrors, layoutErr.Error())
+			} else {
+				layoutErrors = append(layoutErrors, "")
+			}
 			continue
 		}
-
-		cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
-		blocks, err := paddlelayout.SaveCrops(pagePath, cropDir, layout.Blocks)
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("page %d crops: %w", i+1, err)
-		}
-
-		responses = append(responses, resp)
-		pageMarkdowns = append(pageMarkdowns, paddlelayout.ToMarkdown(blocks))
 		layoutBlocks = append(layoutBlocks, blocks)
 		layoutErrors = append(layoutErrors, "")
 	}
+
 	return responses, pageMarkdowns, layoutBlocks, layoutErrors, nil
+}
+
+func detectPageLayout(detector *layout.Detector, pagePath string) ([]layout.Block, error) {
+	if detector == nil {
+		return nil, fmt.Errorf("layout detector not initialized")
+	}
+	f, err := os.Open(pagePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	return detector.Detect(img)
+}
+
+func processLayoutBlocks(ctx context.Context, client *inference.Client, pagePath, cropDir string, detected []layout.Block, outputDir string) ([]paddlelayout.Block, []string, []string) {
+	var blocks []paddlelayout.Block
+	for _, b := range detected {
+		simplified := labelToSimplified(b.Label)
+		blocks = append(blocks, paddlelayout.Block{
+			BBox:  b.BBox,
+			Label: simplified,
+			Order: b.ReadOrder,
+		})
+	}
+	blocks, _ = paddlelayout.SaveCrops(pagePath, cropDir, blocks)
+
+	// Make crop paths relative to outputDir
+	for i := range blocks {
+		if blocks[i].CropImage != "" {
+			rel, err := filepath.Rel(outputDir, blocks[i].CropImage)
+			if err == nil {
+				blocks[i].CropImage = rel
+			}
+		}
+	}
+
+	var responses []string
+	var mds []string
+	for i, block := range blocks {
+		prompt := layout.LabelPrompts[detected[i].Label]
+		if prompt == "" || block.CropImage == "" {
+			continue
+		}
+		// Read back the absolute path for VLM call
+		absPath := filepath.Join(outputDir, block.CropImage)
+		md, err := client.ParseImageWithPrompt(ctx, absPath, prompt)
+		if err != nil {
+			fmt.Printf("Warning: page block %d (%s): %v\n", i+1, detected[i].Label, err)
+			continue
+		}
+		responses = append(responses, md)
+		simple := labelToSimplified(detected[i].Label)
+		switch simple {
+		case "formula":
+			md = "$$\n" + md + "\n$$"
+		}
+		mds = append(mds, md)
+	}
+	return blocks, responses, mds
+}
+
+func labelToSimplified(fineLabel string) string {
+	if s, ok := layout.MarkdownLabelMap[fineLabel]; ok {
+		return s
+	}
+	return "text"
+}
+
+func modelReadyFiles(modelCfg models.Config) []string {
+	if modelCfg.Runtime == models.RuntimeLlamaCpp {
+		return []string{modelCfg.LlamaModelFile, modelCfg.LlamaMMProjFile}
+	}
+	return []string{"config.json"}
 }
 
 type pageDetail struct {
