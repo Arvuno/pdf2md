@@ -4,7 +4,6 @@ package layout
 import (
 	"fmt"
 	"image"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -285,22 +284,12 @@ func postprocessBoxes(raw []float32, labels []string, scaleW, scaleH float32, co
 			continue
 		}
 
-		// Map coordinates from 800x800 space back to original image space.
-		// x_orig = x / scale_w, y_orig = y / scale_h
-		// where scale_w = 800 / orig_w, scale_h = 800 / orig_h
-		ox1 := float64(x1 / scaleW)
-		oy1 := float64(y1 / scaleH)
-		ox2 := float64(x2 / scaleW)
-		oy2 := float64(y2 / scaleH)
-
-		// Clamp to reasonable bounds.
-		ox1 = math.Max(0, ox1)
-		oy1 = math.Max(0, oy1)
-
+		// Model internally maps coordinates to original image space via
+		// im_shape + scale_factor inputs. Use raw values directly.
 		blocks = append(blocks, Block{
 			Label:      labels[labelIdx],
 			Confidence: score,
-			BBox:       [4]float64{ox1, oy1, ox2, oy2},
+			BBox:       [4]float64{float64(x1), float64(y1), float64(x2), float64(y2)},
 			ReadOrder:  readOrder,
 		})
 	}
