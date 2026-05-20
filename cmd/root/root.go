@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/png"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,6 +18,7 @@ import (
 	"github.com/ninehills/pdf2md/pkg/htmlmd"
 	"github.com/ninehills/pdf2md/pkg/inference"
 	"github.com/ninehills/pdf2md/pkg/layout"
+	"github.com/ninehills/pdf2md/pkg/layoutclient"
 	"github.com/ninehills/pdf2md/pkg/markdown"
 	"github.com/ninehills/pdf2md/pkg/model"
 	"github.com/ninehills/pdf2md/pkg/models"
@@ -46,6 +45,8 @@ type Opts struct {
 	GPUDevices    string
 	NoHeaders     bool
 	Timeout       time.Duration
+	ONNXImage     string
+	ONNXPort      int
 }
 
 func NewCommand() *cobra.Command {
@@ -92,6 +93,8 @@ Use --model-dir to specify a local model directory and skip download.`,
 	flags.StringVar(&opts.GPUDevices, "gpu", "all", "GPU devices to use")
 	flags.BoolVar(&opts.NoHeaders, "no-headers", false, "Skip page headers and footers")
 	flags.DurationVar(&opts.Timeout, "timeout", defaultTimeout, "Timeout for inference server startup")
+	flags.StringVar(&opts.ONNXImage, "onnx-image", layoutclient.DefaultONNXImage, "ONNX layout detection Docker image")
+	flags.IntVar(&opts.ONNXPort, "onnx-port", layoutclient.DefaultONNXPort, "Host port for ONNX server")
 
 	return cmd
 }
@@ -140,26 +143,17 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 		}
 	}
 
-	// Step 1b: If paddle layout, download/init layout ONNX model
-	var detector *layout.Detector
+	// Step 1b: If paddle layout, download layout model (served via ONNX Docker)
+	var layoutClient *layoutclient.Client
 	if modelCfg.PostProcess == models.PostProcessPaddleLayout {
 		fmt.Println("=== Step 1b: Prepare layout model ===")
-		layoutDir, err := model.Download(model.DownloadConfig{
+		if _, err := model.Download(model.DownloadConfig{
 			RepoID:     layout.ModelRepoID,
 			TargetDir:  filepath.Join("weights", "layout-model"),
 			ReadyFiles: []string{layout.ModelFileName, layout.ConfigFileName},
-		})
-		if err != nil {
+		}); err != nil {
 			return fmt.Errorf("downloading layout model: %w", err)
 		}
-		if err := layout.InitONNXRuntime(); err != nil {
-			return fmt.Errorf("initializing ONNX Runtime: %w", err)
-		}
-		detector, err = layout.NewDetector(layoutDir)
-		if err != nil {
-			return fmt.Errorf("creating layout detector: %w", err)
-		}
-		defer detector.Destroy()
 	}
 
 	inputAbs, err := filepath.Abs(inputPath)
@@ -181,6 +175,8 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	defer func() {
 		fmt.Println("\n=== Cleanup: Stopping Docker container ===")
 		docker.StopContainer(containerName)
+		docker.StopContainer(layoutclient.DefaultONNXContainerName)
+		docker.StopContainer(layoutclient.DefaultONNXContainerName)
 	}()
 
 	// Select Docker image based on runtime and CLI flags
@@ -219,6 +215,30 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 		return fmt.Errorf("waiting for inference server: %w", err)
 	}
 
+	// Start ONNX layout detection container (paddleocr-vl)
+	if modelCfg.PostProcess == models.PostProcessPaddleLayout {
+		absLayoutPath, _ := filepath.Abs(filepath.Join("weights", "layout-model"))
+		onnxCfg := docker.Config{
+			Runtime:       "onnx",
+			Image:         opts.ONNXImage,
+			ContainerName: layoutclient.DefaultONNXContainerName,
+			Port:          opts.ONNXPort,
+			GPUDevices:    opts.GPUDevices,
+			ModelPath:     absLayoutPath,
+		}
+		onnxPort := onnxCfg.Port
+		if onnxPort == 0 {
+			onnxPort = layoutclient.DefaultONNXPort
+		}
+		if _, err := docker.StartContainer(onnxCfg); err != nil {
+			return fmt.Errorf("starting ONNX container: %w", err)
+		}
+		layoutClient = layoutclient.NewClient(onnxPort)
+		if err := layoutClient.WaitForReady(opts.Timeout); err != nil {
+			return fmt.Errorf("waiting for ONNX server: %w", err)
+		}
+	}
+
 	// Step 3: Extract PDF pages
 	fmt.Println("\n=== Step 3: Extract PDF pages ===")
 	pagesDir := filepath.Join(outputDir, baseName+"_pages")
@@ -243,7 +263,7 @@ func run(ctx context.Context, inputPath string, opts *Opts) error {
 	var layoutErrors []string
 
 	if modelCfg.PostProcess == models.PostProcessPaddleLayout {
-		responses, pageMarkdowns, layoutBlocks, layoutErrors, err = parsePaddlePages(ctx, client, modelCfg, detector, pages, pagesDir, outputDir)
+		responses, pageMarkdowns, layoutBlocks, layoutErrors, err = parsePaddlePages(ctx, client, modelCfg, layoutClient, pages, pagesDir, outputDir)
 	} else {
 		responses, err = client.ParseImages(ctx, pages, opts.Concurrency)
 		if err == nil {
@@ -305,7 +325,7 @@ func convertPages(modelCfg models.Config, responses, pagePaths []string, outputD
 	return pageMarkdowns, nil
 }
 
-func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg models.Config, detector *layout.Detector, pages []string, pagesDir, outputDir string) ([]string, []string, [][]paddlelayout.Block, []string, error) {
+func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg models.Config, layoutClient *layoutclient.Client, pages []string, pagesDir, outputDir string) ([]string, []string, [][]paddlelayout.Block, []string, error) {
 	// Pipeline: layout detection (producer) feeds VLM workers (consumers) via channel.
 	// Layout for page N+1 runs while VLM processes page N blocks concurrently.
 	type pageResult struct {
@@ -323,7 +343,7 @@ func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg mo
 	go func() {
 		defer close(resultCh)
 		for i, pagePath := range pages {
-			detectedBlocks, layoutErr := detectPageLayout(detector, pagePath)
+			detectedBlocks, layoutErr := detectPageLayout(layoutClient, pagePath)
 			if layoutErr == nil && len(detectedBlocks) > 0 {
 				cropDir := filepath.Join(pagesDir, fmt.Sprintf("page-%d_blocks", i+1))
 				bs, rs, md := processLayoutBlocks(ctx, client, pagePath, cropDir, detectedBlocks, outputDir)
@@ -384,23 +404,11 @@ func parsePaddlePages(ctx context.Context, client *inference.Client, modelCfg mo
 
 	return responses, pageMarkdowns, layoutBlocks, layoutErrors, nil
 }
-func detectPageLayout(detector *layout.Detector, pagePath string) ([]layout.Block, error) {
-	if detector == nil {
-		return nil, fmt.Errorf("layout detector not initialized")
-	}
-	f, err := os.Open(pagePath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-	return detector.Detect(img)
+func detectPageLayout(layoutClient *layoutclient.Client, pagePath string) ([]layoutclient.Block, error) {
+	return layoutClient.Detect(pagePath)
 }
 
-func processLayoutBlocks(ctx context.Context, client *inference.Client, pagePath, cropDir string, detected []layout.Block, outputDir string) ([]paddlelayout.Block, []string, []string) {
+func processLayoutBlocks(ctx context.Context, client *inference.Client, pagePath, cropDir string, detected []layoutclient.Block, outputDir string) ([]paddlelayout.Block, []string, []string) {
 	var blocks []paddlelayout.Block
 	for _, b := range detected {
 		simplified := labelToSimplified(b.Label)

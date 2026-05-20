@@ -35,7 +35,9 @@ type Config struct {
 	VLLMArgs        []string // Extra args for vllm serve
 	LlamaModelFile  string   // llama.cpp main GGUF file under ModelPath
 	LlamaMMProjFile string   // llama.cpp mmproj GGUF file under ModelPath
-	LlamaArgs       []string // Extra args for llama-server
+	LlamaArgs       []string
+	// ONNX-specific (empty for non-ONNX runtimes)
+	ONNXModelDir string // Extra args for llama-server
 }
 
 // CheckDocker verifies Docker is installed and running.
@@ -87,26 +89,27 @@ func BuildRunArgs(cfg Config) ([]string, string, int) {
 	}
 
 	switch cfg.Runtime {
+	case "onnx":
+		// ONNX Flask app listens on port 5000 inside the container.
+		// No extra args needed (ENTRYPOINT is python3 server.py).
 	case "llamacpp":
 		args = append(args,
 			"--server",
-			"-m", filepath.ToSlash(filepath.Join(containerModelPath, cfg.LlamaModelFile)),
-			"--mmproj", filepath.ToSlash(filepath.Join(containerModelPath, cfg.LlamaMMProjFile)),
+			"-m", filepath.Join(containerModelPath, cfg.LlamaModelFile),
+			"--mmproj", filepath.Join(containerModelPath, cfg.LlamaMMProjFile),
 			"--host", "0.0.0.0",
 			"--port", strconv.Itoa(containerPort(cfg.Runtime)),
 		)
 		args = append(args, cfg.LlamaArgs...)
 	default:
 		args = append(args,
-			containerModelPath,
-			"--tensor-parallel-size", strconv.Itoa(cfg.TensorParallel),
-			"--gpu-memory-utilization", fmt.Sprintf("%.2f", cfg.GPUMemUtil),
-			"--chat-template-content-format", "string",
-			"--served-model-name", cfg.ServedModelName,
-			"--enforce-eager", // skip CUDA graph capture for faster startup
+			"serve", cfg.ServedModelName,
+			"--host", "0.0.0.0",
+			"--port", strconv.Itoa(containerPort(cfg.Runtime)),
 		)
 		args = append(args, cfg.VLLMArgs...)
 	}
+
 
 	return args, cfg.ContainerName, cfg.Port
 }
@@ -143,10 +146,14 @@ func applyDefaults(cfg *Config) {
 }
 
 func containerPort(runtime string) int {
-	if runtime == "llamacpp" {
+	switch runtime {
+	case "llamacpp":
 		return 8080
+	case "onnx":
+		return 5000
+	default:
+		return 8000
 	}
-	return 8000
 }
 
 // WaitForReady waits for the inference server to become ready.

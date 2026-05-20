@@ -14,21 +14,17 @@
 
 ### PaddleOCR-VL 特殊依赖
 
-`paddleocr-vl-1.5-gguf` 模型使用 ONNX Runtime 进行页面布局检测（PP-DocLayoutV3），需要本机安装 onnxruntime：
+`paddleocr-vl-1.5-gguf` 使用 ONNX Runtime 进行页面布局检测，通过 Docker 容器自动启动，**无需本机安装**。
 
 ```bash
-# GPU 加速（推荐，需要 NVIDIA GPU + CUDA/cuDNN）
-pip install onnxruntime-gpu
+# 默认使用 ghcr.io/ninehills/pdf2md-onnx:latest（首次自动拉取）
+./pdf2md --model paddleocr-vl-1.5-gguf paper.pdf
 
-# 或 CPU 版本
-pip install onnxruntime
-
-# apt 方式
-sudo apt install libonnxruntime-dev
+# 或指定自定义 ONNX 镜像
+./pdf2md --model paddleocr-vl-1.5-gguf --onnx-image my-registry/onnx:latest paper.pdf
 ```
 
-工具启动时会自动搜索 `libonnxruntime.so`，并尝试启用 CUDA 提供器。如 CUDA 不可用会打印警告并回退到 CPU。
-
+布局模型（PP-DocLayoutV3）会自动下载到 `./weights/layout-model/`，并通过 `-v` 挂载到 ONNX 容器中。
 ## 快速开始（小白版）
 
 ### 前置条件

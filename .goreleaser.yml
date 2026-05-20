@@ -5,22 +5,7 @@ before:
     - go mod tidy
 
 builds:
-  # Linux amd64: CGO_ENABLED=1 for ONNX runtime (paddleocr-vl layout detection)
-  - id: pdf2md-linux-amd64
-    binary: pdf2md
-    main: .
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
-    mod_timestamp: "{{ .CommitTimestamp }}"
-
-  # All platforms: CGO_ENABLED=0 (paddleocr-vl uses VLM fallback, no ONNX layout)
-  - id: pdf2md-all
+  - id: pdf2md
     binary: pdf2md
     main: .
     goos:
@@ -35,10 +20,6 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
     mod_timestamp: "{{ .CommitTimestamp }}"
-    # Linux/amd64 is already built with CGO=1 above
-    ignore:
-      - goos: linux
-        goarch: amd64
 
 archives:
   - formats: ["tar.gz"]
