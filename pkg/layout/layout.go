@@ -1,5 +1,8 @@
-// Package layout provides document layout detection using an ONNX PP-DocLayout model.
+//go:build cgo
+
 package layout
+
+// Package layout provides document layout detection using an ONNX PP-DocLayout model.
 
 import (
 	"fmt"
@@ -14,15 +17,6 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// ModelRepoID is the HuggingFace repository for the ONNX layout model.
-const ModelRepoID = "alex-dinh/PP-DocLayoutV3-ONNX"
-
-// ModelFileName is the ONNX model file to use.
-const ModelFileName = "PP-DocLayoutV3.onnx"
-
-// ConfigFileName is the JSON config with label list.
-const ConfigFileName = "config.json"
-
 // ModelInputWidth and ModelInputHeight are the fixed input size.
 const (
 	ModelInputWidth  = 800
@@ -34,14 +28,6 @@ var (
 	imagenetMean = [3]float32{0.485, 0.456, 0.406}
 	imagenetStd  = [3]float32{0.229, 0.224, 0.225}
 )
-
-// Block is a detected layout element.
-type Block struct {
-	Label      string
-	Confidence float32
-	BBox       [4]float64
-	ReadOrder  int
-}
 
 // Detector runs ONNX PP-DocLayout inference.
 type Detector struct {

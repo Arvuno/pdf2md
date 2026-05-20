@@ -5,6 +5,23 @@ import (
 	"os"
 )
 
+// Block is a detected layout element.
+type Block struct {
+	Label      string
+	Confidence float32
+	BBox       [4]float64
+	ReadOrder  int
+}
+
+// ModelRepoID is the HuggingFace repository for the ONNX layout model.
+const ModelRepoID = "alex-dinh/PP-DocLayoutV3-ONNX"
+
+// ModelFileName is the ONNX model file to use.
+const ModelFileName = "PP-DocLayoutV3.onnx"
+
+// ConfigFileName is the JSON config with label list.
+const ConfigFileName = "config.json"
+
 // LabelPrompts maps PP-DocLayout detection labels to PaddleOCR-VL VLM prompts.
 // Empty string means skip (don't send to VLM).
 var LabelPrompts = map[string]string{
