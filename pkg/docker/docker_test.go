@@ -18,8 +18,8 @@ func TestDefaultConstants(t *testing.T) {
 	if DefaultLlamaCppImage != "ghcr.io/ggml-org/llama.cpp:full-cuda13" {
 		t.Errorf("unexpected DefaultLlamaCppImage: %s", DefaultLlamaCppImage)
 	}
-	if DefaultContainerName != "vlmocr-vllm" {
-		t.Errorf("expected DefaultContainerName 'vlmocr-vllm', got %q", DefaultContainerName)
+	if DefaultContainerName != "pdf2md-vllm" {
+		t.Errorf("expected DefaultContainerName 'pdf2md-vllm', got %q", DefaultContainerName)
 	}
 }
 

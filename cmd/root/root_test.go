@@ -12,7 +12,7 @@ func TestNewCommand(t *testing.T) {
 		t.Fatal("expected non-nil command")
 	}
 
-	if cmd.Use != "vlmocr [flags] <input.pdf>" {
+	if cmd.Use != "pdf2md [flags] <input.pdf>" {
 		t.Errorf("unexpected Use: %s", cmd.Use)
 	}
 
@@ -44,8 +44,8 @@ func TestCommand_Help(t *testing.T) {
 	_ = cmd.Execute()
 
 	output := buf.String()
-	if !strings.Contains(output, "vlmocr") {
-		t.Error("help should contain 'vlmocr'")
+	if !strings.Contains(output, "pdf2md") {
+		t.Error("help should contain 'pdf2md'")
 	}
 	if !strings.Contains(output, "dots-ocr") {
 		t.Error("help should mention dots-ocr model")

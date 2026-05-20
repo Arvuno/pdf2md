@@ -1,4 +1,4 @@
-module github.com/ninehills/pdf2md/vlmocr
+module github.com/ninehills/pdf2md
 
 go 1.25.0
 
@@ -7,6 +7,7 @@ require (
 	github.com/gomlx/go-huggingface v0.3.5
 	github.com/openai/openai-go/v3 v3.36.0
 	github.com/spf13/cobra v1.8.1
+	github.com/yalue/onnxruntime_go v1.30.1
 	golang.org/x/sync v0.20.0
 )
 
@@ -23,6 +24,5 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	github.com/yalue/onnxruntime_go v1.30.1 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 )

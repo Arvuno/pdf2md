@@ -1,4 +1,4 @@
-// Package root implements the vlmocr CLI command.
+// Package root implements the pdf2md CLI command.
 package root
 
 import (
@@ -16,15 +16,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ninehills/pdf2md/vlmocr/pkg/docker"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/htmlmd"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/inference"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/layout"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/markdown"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/model"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/models"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/paddlelayout"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/pdf"
+	"github.com/ninehills/pdf2md/pkg/docker"
+	"github.com/ninehills/pdf2md/pkg/htmlmd"
+	"github.com/ninehills/pdf2md/pkg/inference"
+	"github.com/ninehills/pdf2md/pkg/layout"
+	"github.com/ninehills/pdf2md/pkg/markdown"
+	"github.com/ninehills/pdf2md/pkg/model"
+	"github.com/ninehills/pdf2md/pkg/models"
+	"github.com/ninehills/pdf2md/pkg/paddlelayout"
+	"github.com/ninehills/pdf2md/pkg/pdf"
 )
 
 const (
@@ -52,9 +52,9 @@ func NewCommand() *cobra.Command {
 	opts := &Opts{}
 
 	cmd := &cobra.Command{
-		Use:   "vlmocr [flags] <input.pdf>",
+		Use:   "pdf2md [flags] <input.pdf>",
 		Short: "Convert PDF documents to Markdown using VLM OCR models",
-		Long: `vlmocr is a CLI tool that converts PDF documents to Markdown using
+		Long: `pdf2md is a CLI tool that converts PDF documents to Markdown using
 Vision Language Models via local Docker inference servers.
 
 Supported models:

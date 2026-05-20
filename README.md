@@ -1,4 +1,4 @@
-# vlmocr
+# pdf2md
 
 将 PDF 文档转换为 Markdown 的命令行工具，支持多种视觉语言模型（VLM），通过本地 Docker 推理服务完成端到端转换。
 
@@ -31,21 +31,21 @@ nvidia-smi
 ### 第一步：构建
 
 ```bash
-git clone <repo-url> && cd vlmocr
-go build -o vlmocr .
+git clone <repo-url> && cd pdf2md
+go build -o pdf2md .
 ```
 
 ### 第二步：使用
 
 ```bash
 # 使用默认模型 dots-ocr（首次会自动下载/准备模型到 ./weights/dots-ocr/）
-./vlmocr your_document.pdf
+./pdf2md your_document.pdf
 
 # 指定使用 logics-parsing-v2 模型
-./vlmocr --model logics-parsing-v2 your_document.pdf
+./pdf2md --model logics-parsing-v2 your_document.pdf
 
 # 使用 PaddleOCR-VL-1.5 GGUF（llama.cpp 后端，会额外输出 layout blocks 和裁图）
-./vlmocr --model paddleocr-vl-1.5-gguf your_document.pdf
+./pdf2md --model paddleocr-vl-1.5-gguf your_document.pdf
 ```
 
 转换完成后，默认会在**当前目录**生成：
@@ -70,7 +70,7 @@ your_document.pdf_pages/page-1_blocks/block-001_page.png
 ## 完整用法
 
 ```
-vlmocr [flags] <input.pdf>
+pdf2md [flags] <input.pdf>
 ```
 
 ### 参数说明
@@ -93,25 +93,25 @@ vlmocr [flags] <input.pdf>
 
 ```bash
 # 基本用法
-./vlmocr paper.pdf
+./pdf2md paper.pdf
 
 # 使用 logics-parsing-v2
-./vlmocr --model logics-parsing-v2 paper.pdf
+./pdf2md --model logics-parsing-v2 paper.pdf
 
 # 使用 PaddleOCR-VL-1.5 GGUF + llama.cpp
-./vlmocr --model paddleocr-vl-1.5-gguf -o outputs/paddleocr-vl paper.pdf
+./pdf2md --model paddleocr-vl-1.5-gguf -o outputs/paddleocr-vl paper.pdf
 
 # 指定输出目录
-./vlmocr -o ./output paper.pdf
+./pdf2md -o ./output paper.pdf
 
 # 自定义模型目录
-./vlmocr --model-dir /data/models/dots-ocr paper.pdf
+./pdf2md --model-dir /data/models/dots-ocr paper.pdf
 
 # 输出到指定目录
-./vlmocr --model dots-ocr -o outputs/dots-ocr paper.pdf
+./pdf2md --model dots-ocr -o outputs/dots-ocr paper.pdf
 
 # 低 DPI 快速预览
-./vlmocr --dpi 100 paper.pdf
+./pdf2md --dpi 100 paper.pdf
 ```
 
 ## 工作流程
@@ -137,7 +137,7 @@ PDF 文件
 ## 项目结构
 
 ```
-vlmocr/
+pdf2md/
 ├── main.go                    # 入口
 ├── cmd/root/root.go           # CLI 命令
 ├── pkg/

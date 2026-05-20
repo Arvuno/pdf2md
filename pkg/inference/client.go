@@ -10,8 +10,8 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ninehills/pdf2md/vlmocr/pkg/base64util"
-	"github.com/ninehills/pdf2md/vlmocr/pkg/models"
+	"github.com/ninehills/pdf2md/pkg/base64util"
+	"github.com/ninehills/pdf2md/pkg/models"
 )
 
 // Client wraps an OpenAI-compatible client for vLLM inference.

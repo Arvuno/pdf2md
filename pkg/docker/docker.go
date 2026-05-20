@@ -18,7 +18,7 @@ const (
 	// DefaultLlamaCppImage is the llama.cpp CUDA Docker image.
 	DefaultLlamaCppImage = "ghcr.io/ggml-org/llama.cpp:full-cuda13"
 	// DefaultContainerName is the default Docker container name.
-	DefaultContainerName = "vlmocr-vllm"
+	DefaultContainerName = "pdf2md-vllm"
 )
 
 // Config holds Docker container configuration.

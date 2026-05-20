@@ -45,7 +45,7 @@ PDF 文件
 ## 新增文件
 
 ```
-vlmocr/
+pdf2md/
 ├── pkg/layout/
 │   ├── layout.go          # ONNX 推理会话管理、布局检测核心逻辑
 │   ├── layout_test.go     # 单元测试

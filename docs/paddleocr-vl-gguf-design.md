@@ -2,7 +2,7 @@
 
 ## 目标
 
-在现有 Go 版 `vlmocr` 中增加第三种模型：`paddleocr-vl-1.5-gguf`。
+在现有 Go 版 `pdf2md` 中增加第三种模型：`paddleocr-vl-1.5-gguf`。
 
 约束：
 
@@ -129,7 +129,7 @@ PaddleOCR-VL-GGUF 额外输出：
 真实功能测试：
 
 ```bash
-./vlmocr --model paddleocr-vl-1.5-gguf --timeout 30m -o outputs/paddleocr-vl-1.5-gguf ../examples/2603.29199v1.pdf
+./pdf2md --model paddleocr-vl-1.5-gguf --timeout 30m -o outputs/paddleocr-vl-1.5-gguf ../examples/2603.29199v1.pdf
 ```
 
 验收：

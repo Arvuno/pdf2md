@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ninehills/pdf2md/vlmocr/pkg/models"
+	"github.com/ninehills/pdf2md/pkg/models"
 )
 
 func TestNewClient(t *testing.T) {
