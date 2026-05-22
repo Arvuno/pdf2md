@@ -119,6 +119,39 @@ go test ./... -count=1    # 78 tests, 13 packages
 go vet ./...              # 静态检查
 ```
 
+## 故障排除
+
+### Docker 启动失败
+如果容器无法启动，检查 Docker 是否正常运行：
+```bash
+docker --version && nvidia-smi
+```
+
+### GPU 不可用
+确保安装了 `nvidia-container-toolkit` 且 Docker 可以访问 GPU：
+```bash
+docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
+```
+
+### 服务启动超时
+默认超时为 30 分钟（`--timeout 30m`）。大文件或复杂 PDF 可能需要更长的时间。可以适当增加超时时间：
+```bash
+./pdf2md --timeout 60m paper.pdf
+```
+
+### 模型下载失败
+如果模型下载失败，可以手动下载并放置在 `./weights/<model>/` 目录下：
+```bash
+# dots-ocr 模型
+./pdf2md --model-dir ./weights/dots-ocr paper.pdf
+```
+
+### 端口占用
+如果默认端口 8000 被占用，可以通过 `--port` 参数指定其他端口：
+```bash
+./pdf2md --port 8080 paper.pdf
+```
+
 ## 致谢
 
 - [go-fitz](https://github.com/gen2brain/go-fitz) — Go MuPDF 绑定
