@@ -57,6 +57,21 @@ go build -o pdf2md .
 ./pdf2md -o ./output paper.pdf
 ```
 
+### 🚀 快速开始
+
+```bash
+# 1. 下载二进制（Linux x86_64）
+curl -sL https://github.com/ninehills/pdf2md/releases/download/v0.1/pdf2md_0.1_linux_amd64.tar.gz | tar xz
+
+# 2. 确认 Docker 和 GPU 可用
+docker --version && nvidia-smi
+
+# 3. 转换 PDF 为 Markdown（使用默认 dots-ocr 模型）
+./pdf2md paper.pdf
+
+# 输出: paper.md + paper.json
+```
+
 ### 命令行参数
 
 | 参数 | 默认值 | 说明 |
