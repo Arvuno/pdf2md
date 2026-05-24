@@ -114,9 +114,71 @@ pdf2md/
 
 ## 开发
 
+### 环境要求
+
+- **Go 1.25+** — 项目主要语言
+- **Docker** + `nvidia-container-toolkit` — 容器化 VLM 推理
+- **Git** — 版本控制
+
+### 快速开始
+
 ```bash
-go test ./... -count=1    # 78 tests, 13 packages
-go vet ./...              # 静态检查
+# 1. 克隆仓库
+git clone https://github.com/ninehills/pdf2md && cd pdf2md
+
+# 2. 安装依赖
+go mod download
+
+# 3. 编译
+go build -o pdf2md .
+
+# 4. 运行测试
+go test ./... -count=1
+```
+
+### 代码检查
+
+```bash
+go test ./... -count=1    # 运行全部测试 (~78 tests, 13 packages)
+go vet ./...              # 静态分析
+go fmt ./...              # 代码格式化
+```
+
+### 添加新模型
+
+1. 在 `pkg/models/` 中注册模型定义
+2. 在 `pkg/layout/` 中添加布局标签映射（如需要）
+3. 在 `pkg/inference/` 中实现推理客户端（如使用新的 API）
+4. 更新 `cmd/root/` 中的 CLI 参数（如需要）
+
+### 项目结构
+
+```
+pdf2md/
+├── cmd/root/          # CLI 入口 + pipeline 编排
+├── pkg/
+│   ├── base64util/    # Base64 编解码
+│   ├── docker/        # Docker 容器管理
+│   ├── htmlmd/        # HTML → Markdown 转换
+│   ├── inference/     # VLM HTTP 推理客户端
+│   ├── layout/        # Label→Prompt 映射表
+│   ├── layoutclient/  # ONNX Docker HTTP 客户端
+│   ├── markdown/      # Markdown 合成/合并
+│   ├── model/         # HF 模型下载
+│   ├── models/        # 模型注册表
+│   ├── paddlelayout/  # PaddleOCR layout 解析/裁图
+│   └── pdf/           # PDF 页面渲染
+├── docker/onnx/       # ONNX 容器镜像定义
+├── docs/              # 设计文档
+├── examples/          # 测试用 PDF
+└── .github/workflows/ # CI/CD
+```
+
+### 发布
+
+```bash
+# 打标签触发 Release workflow
+git tag v0.x.x && git push upstream --tags
 ```
 
 ## 致谢
