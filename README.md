@@ -125,3 +125,9 @@ go vet ./...              # 静态检查
 - [onnxruntime](https://onnxruntime.ai) — ONNX 运行时
 - [vLLM](https://github.com/vllm-project/vllm) — VLM 推理引擎
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — llama.cpp 推理引擎
+
+## Contributing
+
+We welcome contributions! Please feel free to submit a Pull Request or open an issue for bug reports and feature suggestions.
+
+- Documentation updated for clarity
