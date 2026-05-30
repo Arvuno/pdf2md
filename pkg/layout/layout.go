@@ -3,6 +3,7 @@
 package layout
 
 // Package layout provides document layout detection using an ONNX PP-DocLayout model.
+// This package requires CGO and cannot be used with CGO_ENABLED=0 builds.
 
 import (
 	"fmt"
